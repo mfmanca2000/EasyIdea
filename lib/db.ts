@@ -1,4 +1,4 @@
-import { Redis } from '@upstash/redis';
+import Redis from 'ioredis';
 
 export interface Idea {
   id: string;
@@ -10,20 +10,34 @@ export interface Idea {
   color: string;
 }
 
-// Create Redis client with REDIS_URL (Vercel's new standard)
-// The REDIS_URL contains the full connection string with auth
+// Create Redis client with REDIS_URL
+// Works with standard Redis connection URLs
 const redis = process.env.REDIS_URL
-  ? Redis.fromEnv()
-  : new Redis({ url: 'http://localhost', token: 'local' }); // Fallback for local dev
+  ? new Redis(process.env.REDIS_URL, {
+      maxRetriesPerRequest: 3,
+      enableReadyCheck: false,
+      lazyConnect: true,
+    })
+  : new Redis({
+      host: 'localhost',
+      lazyConnect: true,
+    });
+
+// Ensure connection
+if (process.env.REDIS_URL) {
+  redis.connect().catch((err) => {
+    console.error('Redis connection error:', err);
+  });
+}
 
 // KV key patterns:
-// - idea:{ideaId} -> Idea object
+// - idea:{ideaId} -> Idea object (JSON string)
 // - user_ideas:{userId} -> Set of idea IDs
 
 export async function getIdeas(userId: string): Promise<Idea[]> {
   try {
     // Get all idea IDs for this user
-    const ideaIds = await redis.smembers(`user_ideas:${userId}`) as string[];
+    const ideaIds = await redis.smembers(`user_ideas:${userId}`);
 
     if (!ideaIds || ideaIds.length === 0) {
       return [];
@@ -32,8 +46,9 @@ export async function getIdeas(userId: string): Promise<Idea[]> {
     // Fetch all ideas in parallel
     const ideas = await Promise.all(
       ideaIds.map(async (id) => {
-        const idea = await redis.get<Idea>(`idea:${id}`);
-        return idea;
+        const ideaJson = await redis.get(`idea:${id}`);
+        if (!ideaJson) return null;
+        return JSON.parse(ideaJson) as Idea;
       })
     );
 
@@ -49,10 +64,14 @@ export async function getIdeas(userId: string): Promise<Idea[]> {
 
 export async function getIdea(id: string, userId: string): Promise<Idea | null> {
   try {
-    const idea = await redis.get<Idea>(`idea:${id}`);
+    const ideaJson = await redis.get(`idea:${id}`);
+
+    if (!ideaJson) return null;
+
+    const idea = JSON.parse(ideaJson) as Idea;
 
     // Verify the idea belongs to this user
-    if (idea && idea.userId === userId) {
+    if (idea.userId === userId) {
       return idea;
     }
 
