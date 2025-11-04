@@ -221,7 +221,7 @@ export default function Dashboard() {
 
       {/* Edit Dialog */}
       <Dialog open={!!selectedIdea} onOpenChange={() => setSelectedIdea(null)}>
-        <DialogContent className="sm:max-w-[600px]">
+        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto top-[10%] translate-y-0 sm:top-[50%] sm:translate-y-[-50%]">
           <DialogHeader>
             <DialogTitle>Edit Idea</DialogTitle>
           </DialogHeader>
