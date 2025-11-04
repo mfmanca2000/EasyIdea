@@ -1,4 +1,4 @@
-import { kv } from '@vercel/kv';
+import { Redis } from '@upstash/redis';
 
 export interface Idea {
   id: string;
@@ -10,6 +10,12 @@ export interface Idea {
   color: string;
 }
 
+// Create Redis client with REDIS_URL (Vercel's new standard)
+// The REDIS_URL contains the full connection string with auth
+const redis = process.env.REDIS_URL
+  ? Redis.fromEnv()
+  : new Redis({ url: 'http://localhost', token: 'local' }); // Fallback for local dev
+
 // KV key patterns:
 // - idea:{ideaId} -> Idea object
 // - user_ideas:{userId} -> Set of idea IDs
@@ -17,7 +23,7 @@ export interface Idea {
 export async function getIdeas(userId: string): Promise<Idea[]> {
   try {
     // Get all idea IDs for this user
-    const ideaIds = await kv.smembers(`user_ideas:${userId}`) as string[];
+    const ideaIds = await redis.smembers(`user_ideas:${userId}`) as string[];
 
     if (!ideaIds || ideaIds.length === 0) {
       return [];
@@ -26,7 +32,7 @@ export async function getIdeas(userId: string): Promise<Idea[]> {
     // Fetch all ideas in parallel
     const ideas = await Promise.all(
       ideaIds.map(async (id) => {
-        const idea = await kv.get<Idea>(`idea:${id}`);
+        const idea = await redis.get<Idea>(`idea:${id}`);
         return idea;
       })
     );
@@ -43,7 +49,7 @@ export async function getIdeas(userId: string): Promise<Idea[]> {
 
 export async function getIdea(id: string, userId: string): Promise<Idea | null> {
   try {
-    const idea = await kv.get<Idea>(`idea:${id}`);
+    const idea = await redis.get<Idea>(`idea:${id}`);
 
     // Verify the idea belongs to this user
     if (idea && idea.userId === userId) {
@@ -67,10 +73,10 @@ export async function createIdea(idea: Omit<Idea, 'id' | 'createdAt' | 'updatedA
 
   try {
     // Store the idea
-    await kv.set(`idea:${newIdea.id}`, newIdea);
+    await redis.set(`idea:${newIdea.id}`, JSON.stringify(newIdea));
 
     // Add the idea ID to the user's set of ideas
-    await kv.sadd(`user_ideas:${idea.userId}`, newIdea.id);
+    await redis.sadd(`user_ideas:${idea.userId}`, newIdea.id);
 
     return newIdea;
   } catch (error) {
@@ -97,7 +103,7 @@ export async function updateIdea(
       updatedAt: new Date().toISOString(),
     };
 
-    await kv.set(`idea:${id}`, updatedIdea);
+    await redis.set(`idea:${id}`, JSON.stringify(updatedIdea));
 
     return updatedIdea;
   } catch (error) {
@@ -116,10 +122,10 @@ export async function deleteIdea(id: string, userId: string): Promise<boolean> {
     }
 
     // Delete the idea
-    await kv.del(`idea:${id}`);
+    await redis.del(`idea:${id}`);
 
     // Remove from user's set of ideas
-    await kv.srem(`user_ideas:${userId}`, id);
+    await redis.srem(`user_ideas:${userId}`, id);
 
     return true;
   } catch (error) {
