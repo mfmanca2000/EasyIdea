@@ -1,5 +1,4 @@
-import { promises as fs } from 'fs';
-import path from 'path';
+import { kv } from '@vercel/kv';
 
 export interface Idea {
   id: string;
@@ -11,40 +10,54 @@ export interface Idea {
   color: string;
 }
 
-const DB_PATH = path.join(process.cwd(), 'data', 'ideas.json');
-
-async function ensureDbFile() {
-  const dir = path.dirname(DB_PATH);
-  try {
-    await fs.mkdir(dir, { recursive: true });
-  } catch (error) {
-    // Directory might already exist
-  }
-
-  try {
-    await fs.access(DB_PATH);
-  } catch {
-    await fs.writeFile(DB_PATH, JSON.stringify([]));
-  }
-}
+// KV key patterns:
+// - idea:{ideaId} -> Idea object
+// - user_ideas:{userId} -> Set of idea IDs
 
 export async function getIdeas(userId: string): Promise<Idea[]> {
-  await ensureDbFile();
-  const data = await fs.readFile(DB_PATH, 'utf-8');
-  const allIdeas: Idea[] = JSON.parse(data);
-  return allIdeas.filter(idea => idea.userId === userId);
+  try {
+    // Get all idea IDs for this user
+    const ideaIds = await kv.smembers(`user_ideas:${userId}`) as string[];
+
+    if (!ideaIds || ideaIds.length === 0) {
+      return [];
+    }
+
+    // Fetch all ideas in parallel
+    const ideas = await Promise.all(
+      ideaIds.map(async (id) => {
+        const idea = await kv.get<Idea>(`idea:${id}`);
+        return idea;
+      })
+    );
+
+    // Filter out any null values and sort by creation date (newest first)
+    return ideas
+      .filter((idea): idea is Idea => idea !== null)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  } catch (error) {
+    console.error('Error getting ideas:', error);
+    return [];
+  }
 }
 
 export async function getIdea(id: string, userId: string): Promise<Idea | null> {
-  const ideas = await getIdeas(userId);
-  return ideas.find(idea => idea.id === id) || null;
+  try {
+    const idea = await kv.get<Idea>(`idea:${id}`);
+
+    // Verify the idea belongs to this user
+    if (idea && idea.userId === userId) {
+      return idea;
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Error getting idea:', error);
+    return null;
+  }
 }
 
 export async function createIdea(idea: Omit<Idea, 'id' | 'createdAt' | 'updatedAt'>): Promise<Idea> {
-  await ensureDbFile();
-  const data = await fs.readFile(DB_PATH, 'utf-8');
-  const allIdeas: Idea[] = JSON.parse(data);
-
   const newIdea: Idea = {
     ...idea,
     id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
@@ -52,41 +65,65 @@ export async function createIdea(idea: Omit<Idea, 'id' | 'createdAt' | 'updatedA
     updatedAt: new Date().toISOString(),
   };
 
-  allIdeas.push(newIdea);
-  await fs.writeFile(DB_PATH, JSON.stringify(allIdeas, null, 2));
+  try {
+    // Store the idea
+    await kv.set(`idea:${newIdea.id}`, newIdea);
 
-  return newIdea;
+    // Add the idea ID to the user's set of ideas
+    await kv.sadd(`user_ideas:${idea.userId}`, newIdea.id);
+
+    return newIdea;
+  } catch (error) {
+    console.error('Error creating idea:', error);
+    throw error;
+  }
 }
 
-export async function updateIdea(id: string, userId: string, updates: Partial<Omit<Idea, 'id' | 'userId' | 'createdAt'>>): Promise<Idea | null> {
-  await ensureDbFile();
-  const data = await fs.readFile(DB_PATH, 'utf-8');
-  const allIdeas: Idea[] = JSON.parse(data);
+export async function updateIdea(
+  id: string,
+  userId: string,
+  updates: Partial<Omit<Idea, 'id' | 'userId' | 'createdAt'>>
+): Promise<Idea | null> {
+  try {
+    const existingIdea = await getIdea(id, userId);
 
-  const index = allIdeas.findIndex(idea => idea.id === id && idea.userId === userId);
-  if (index === -1) return null;
+    if (!existingIdea) {
+      return null;
+    }
 
-  allIdeas[index] = {
-    ...allIdeas[index],
-    ...updates,
-    updatedAt: new Date().toISOString(),
-  };
+    const updatedIdea: Idea = {
+      ...existingIdea,
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    };
 
-  await fs.writeFile(DB_PATH, JSON.stringify(allIdeas, null, 2));
+    await kv.set(`idea:${id}`, updatedIdea);
 
-  return allIdeas[index];
+    return updatedIdea;
+  } catch (error) {
+    console.error('Error updating idea:', error);
+    return null;
+  }
 }
 
 export async function deleteIdea(id: string, userId: string): Promise<boolean> {
-  await ensureDbFile();
-  const data = await fs.readFile(DB_PATH, 'utf-8');
-  const allIdeas: Idea[] = JSON.parse(data);
+  try {
+    // Verify the idea exists and belongs to this user
+    const idea = await getIdea(id, userId);
 
-  const filtered = allIdeas.filter(idea => !(idea.id === id && idea.userId === userId));
+    if (!idea) {
+      return false;
+    }
 
-  if (filtered.length === allIdeas.length) return false;
+    // Delete the idea
+    await kv.del(`idea:${id}`);
 
-  await fs.writeFile(DB_PATH, JSON.stringify(filtered, null, 2));
+    // Remove from user's set of ideas
+    await kv.srem(`user_ideas:${userId}`, id);
 
-  return true;
+    return true;
+  } catch (error) {
+    console.error('Error deleting idea:', error);
+    return false;
+  }
 }
