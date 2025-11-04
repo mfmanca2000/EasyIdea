@@ -25,6 +25,13 @@ export function PostIt({ idea, onClick, onDelete }: PostItProps) {
   const [isHovered, setIsHovered] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // Generate consistent but varied rotation for each post-it based on its ID
+  const getRotation = () => {
+    const hash = idea.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    const rotations = [-3, -2, -1, 0, 1, 2, 3];
+    return rotations[hash % rotations.length];
+  };
+
   const handleDelete = async (e: React.MouseEvent) => {
     e.stopPropagation();
     setIsDeleting(true);
@@ -37,7 +44,7 @@ export function PostIt({ idea, onClick, onDelete }: PostItProps) {
         isDeleting ? "scale-0 opacity-0" : "scale-100 opacity-100"
       }`}
       style={{
-        transform: isHovered ? "translateY(-8px) rotate(0deg)" : "rotate(1deg)",
+        transform: isHovered ? "translateY(-8px) scale(1.05) rotate(0deg)" : `rotate(${getRotation()}deg)`,
       }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
@@ -53,11 +60,11 @@ export function PostIt({ idea, onClick, onDelete }: PostItProps) {
 
       {/* Post-it note */}
       <div
-        className="relative p-6 rounded-sm shadow-lg hover:shadow-2xl transition-shadow duration-200 min-h-[200px] w-[250px]"
+        className="relative p-4 rounded-sm shadow-lg hover:shadow-2xl transition-shadow duration-200 min-h-[160px] w-full max-w-[180px]"
         style={{
           backgroundColor: idea.color,
           boxShadow: isHovered
-            ? "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04), inset 0 0 0 1px rgba(0,0,0,0.05)"
+            ? "0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 0, 0, 0.1), inset 0 0 0 1px rgba(0,0,0,0.05)"
             : "0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05), inset 0 0 0 1px rgba(0,0,0,0.05)",
         }}
       >
@@ -71,9 +78,9 @@ export function PostIt({ idea, onClick, onDelete }: PostItProps) {
         </button>
 
         {/* Content */}
-        <div className="space-y-3">
+        <div className="space-y-2">
           <h3
-            className="font-bold text-lg text-gray-800 line-clamp-2 break-words"
+            className="font-bold text-base text-gray-800 line-clamp-2 break-words"
             style={{
               textShadow: "0 1px 2px rgba(255,255,255,0.5)",
             }}
@@ -81,7 +88,7 @@ export function PostIt({ idea, onClick, onDelete }: PostItProps) {
             {idea.title}
           </h3>
           <p
-            className="text-sm text-gray-700 line-clamp-4 break-words"
+            className="text-xs text-gray-700 line-clamp-3 break-words"
             style={{
               textShadow: "0 1px 2px rgba(255,255,255,0.3)",
             }}
@@ -91,8 +98,8 @@ export function PostIt({ idea, onClick, onDelete }: PostItProps) {
         </div>
 
         {/* Date */}
-        <div className="absolute bottom-2 right-3 text-xs text-gray-600 opacity-60">
-          {new Date(idea.createdAt).toLocaleDateString()}
+        <div className="absolute bottom-1.5 right-2 text-[10px] text-gray-600 opacity-60">
+          {new Date(idea.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
         </div>
 
         {/* Paper texture overlay */}
