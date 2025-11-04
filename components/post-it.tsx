@@ -21,6 +21,20 @@ const POST_IT_COLORS = [
   "#F0E68C", // Khaki
 ];
 
+// Helper function to darken a color for the curled corner
+function getDarkerShade(color: string): string {
+  // Convert hex to RGB, darken, and return
+  const hex = color.replace('#', '');
+  const r = parseInt(hex.substr(0, 2), 16);
+  const g = parseInt(hex.substr(2, 2), 16);
+  const b = parseInt(hex.substr(4, 2), 16);
+
+  // Darken by 15%
+  const darken = (val: number) => Math.max(0, Math.floor(val * 0.85));
+
+  return `rgb(${darken(r)}, ${darken(g)}, ${darken(b)})`;
+}
+
 export function PostIt({ idea, onClick, onDelete }: PostItProps) {
   const [isHovered, setIsHovered] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -60,7 +74,7 @@ export function PostIt({ idea, onClick, onDelete }: PostItProps) {
 
       {/* Post-it note */}
       <div
-        className="relative p-4 rounded-sm shadow-lg hover:shadow-2xl transition-shadow duration-200 min-h-[160px] w-full max-w-[180px]"
+        className="relative p-4 rounded-sm shadow-lg hover:shadow-2xl transition-shadow duration-200 min-h-[160px] w-full max-w-[180px] overflow-hidden"
         style={{
           backgroundColor: idea.color,
           boxShadow: isHovered
@@ -109,6 +123,33 @@ export function PostIt({ idea, onClick, onDelete }: PostItProps) {
             backgroundImage: `url("data:image/svg+xml,%3Csvg width='100' height='100' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' /%3E%3C/filter%3E%3Crect width='100' height='100' filter='url(%23noise)' opacity='0.03' /%3E%3C/svg%3E")`,
           }}
         />
+
+        {/* Curled corner effect - angolo sollevato */}
+        <div
+          className="absolute bottom-0 right-0 pointer-events-none"
+          style={{
+            width: 0,
+            height: 0,
+            borderStyle: 'solid',
+            borderWidth: '0 0 24px 24px',
+            borderColor: `transparent transparent rgba(0,0,0,0.1) transparent`,
+            filter: 'drop-shadow(-1px -1px 2px rgba(0,0,0,0.15))',
+          }}
+        >
+          {/* Inner fold - darker shade */}
+          <div
+            style={{
+              position: 'absolute',
+              bottom: '-24px',
+              right: 0,
+              width: 0,
+              height: 0,
+              borderStyle: 'solid',
+              borderWidth: '0 0 24px 24px',
+              borderColor: `transparent transparent ${getDarkerShade(idea.color)} transparent`,
+            }}
+          />
+        </div>
       </div>
     </div>
   );
