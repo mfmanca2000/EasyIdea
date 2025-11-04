@@ -11,7 +11,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Idea } from "@/lib/db";
-import { Lightbulb, LogOut, Plus } from "lucide-react";
+import { Lightbulb, LogOut, Plus, Trash2 } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { useEffect, useState } from "react";
 
@@ -263,23 +263,45 @@ export default function Dashboard() {
                 ))}
               </div>
             </div>
-            <div className="flex gap-2 justify-end">
+            <div className="flex gap-2 justify-between">
               <Button
                 type="button"
-                variant="outline"
-                onClick={() => setSelectedIdea(null)}
+                variant="destructive"
+                onClick={async () => {
+                  if (
+                    selectedIdea &&
+                    confirm(
+                      "Are you sure you want to delete this idea? This cannot be undone."
+                    )
+                  ) {
+                    await handleDelete(selectedIdea.id);
+                    setSelectedIdea(null);
+                  }
+                }}
                 disabled={isUpdating}
+                className="gap-2"
               >
-                Cancel
+                <Trash2 className="w-4 h-4" />
+                Delete
               </Button>
-              <Button
-                type="submit"
-                disabled={
-                  isUpdating || !editTitle.trim() || !editDescription.trim()
-                }
-              >
-                {isUpdating ? "Updating..." : "Update Idea"}
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setSelectedIdea(null)}
+                  disabled={isUpdating}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={
+                    isUpdating || !editTitle.trim() || !editDescription.trim()
+                  }
+                >
+                  {isUpdating ? "Updating..." : "Update Idea"}
+                </Button>
+              </div>
             </div>
           </form>
         </DialogContent>
